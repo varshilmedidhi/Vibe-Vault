@@ -1,8 +1,22 @@
-import { config } from "dotenv";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 import { connectDB } from "../lib/db.js";
 import User from "../models/user.model.js";
+import bcrypt from "bcrypt";
 
-config();
+// Fix __dirname in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Configure dotenv with the correct path
+dotenv.config({ path: path.join(__dirname, "../..", ".env") });
+
+const hashPassword = async (password) => {
+  const salt = await bcrypt.genSalt(10);
+  return await bcrypt.hash(password, salt);
+};
 
 const seedUsers = [
   // Female Users
@@ -104,12 +118,24 @@ const seedDatabase = async () => {
   try {
     await connectDB();
 
-    await User.insertMany(seedUsers);
+    // Clear existing users
+    await User.deleteMany({});
+
+    // Hash passwords before inserting
+    const usersWithHashedPasswords = await Promise.all(
+      seedUsers.map(async (user) => ({
+        ...user,
+        password: await hashPassword(user.password),
+      }))
+    );
+
+    await User.insertMany(usersWithHashedPasswords);
     console.log("Database seeded successfully");
+    process.exit(0);
   } catch (error) {
     console.error("Error seeding database:", error);
+    process.exit(1);
   }
 };
 
-// Call the function
 seedDatabase();
